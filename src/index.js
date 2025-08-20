@@ -357,17 +357,21 @@ module.exports = function (app) {
         if (points.length > 0) {
           accumulatedPoints = accumulatedPoints.concat(points)
           let now = Date.now()
-          if  ( batchWriteInterval == 0 || now - lastWriteTime > batchWriteInterval ) {
+          if (batchWriteInterval == 0 || now - lastWriteTime > batchWriteInterval) {
             lastWriteTime = now
             clientP
               .then(client => {
                 const thePoints = accumulatedPoints
-                accumulatedPoints = []
                 return client.writePoints(thePoints)
+                  .then(() => {
+                    accumulatedPoints = []
+                  })
+                  .catch(error => {
+                    logError(error)
+                  })
               })
               .catch(error => {
                 logError(error)
-                accumulatedPoints = []
               })
           }
         }
