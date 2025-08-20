@@ -352,26 +352,64 @@ module.exports = function (app) {
       let accumulatedPoints = []
       let lastWriteTime = Date.now()
       let batchWriteInterval = (typeof options.batchWriteInterval === 'undefined' ? 10 : options.batchWriteInterval) * 1000
+
+      // ---- Begin improved write error handling ----
+      let writeFailureCount = 0;
+      let writeRetryTimeout = null;
+      const MAX_ACCUMULATED_POINTS = 10000; // prevent memory bloat
+
       const handleDelta = delta => {
-        const points = deltaToPoints(delta)
+        const points = deltaToPoints(delta);
         if (points.length > 0) {
-          accumulatedPoints = accumulatedPoints.concat(points)
-          let now = Date.now()
+          accumulatedPoints = accumulatedPoints.concat(points);
+
+          // Limit memory usage
+          if (accumulatedPoints.length > MAX_ACCUMULATED_POINTS) {
+            logError(`signalk-to-influxdb: Dropping old points, buffer exceeded ${MAX_ACCUMULATED_POINTS}!`);
+            accumulatedPoints = accumulatedPoints.slice(-MAX_ACCUMULATED_POINTS);
+          }
+
+          let now = Date.now();
           if  ( batchWriteInterval == 0 || now - lastWriteTime > batchWriteInterval ) {
-            lastWriteTime = now
-            clientP
-              .then(client => {
-                const thePoints = accumulatedPoints
-                accumulatedPoints = []
-                return client.writePoints(thePoints)
-              })
-              .catch(error => {
-                logError(error)
-                accumulatedPoints = []
-              })
+            lastWriteTime = now;
+            const tryWrite = () => {
+              clientP
+                .then(client => {
+                  const thePoints = accumulatedPoints;
+                  return client.writePoints(thePoints)
+                    .then(() => {
+                      accumulatedPoints = [];
+                      writeFailureCount = 0;
+                      if (writeRetryTimeout) {
+                        clearTimeout(writeRetryTimeout);
+                        writeRetryTimeout = null;
+                      }
+                    })
+                    .catch(error => {
+                      logError(error);
+                      writeFailureCount++;
+                      // Exponential backoff: min 2s, max 2min
+                      const retryDelay = Math.min(120000, 2000 * Math.pow(2, writeFailureCount));
+                      if (!writeRetryTimeout) {
+                        writeRetryTimeout = setTimeout(tryWrite, retryDelay);
+                      }
+                    });
+                })
+                .catch(error => {
+                  logError(error);
+                  writeFailureCount++;
+                  const retryDelay = Math.min(120000, 2000 * Math.pow(2, writeFailureCount));
+                  if (!writeRetryTimeout) {
+                    writeRetryTimeout = setTimeout(tryWrite, retryDelay);
+                  }
+                });
+            };
+            tryWrite();
           }
         }
-      }
+      };
+      // ---- End improved write error handling ----
+
       app.signalk.on('delta', handleDelta)
       const pruneInterval = setInterval(() => {
         pruneTimestamps(1000 * options.resolution)
