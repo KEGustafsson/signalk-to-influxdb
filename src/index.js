@@ -48,8 +48,8 @@ module.exports = function (app) {
         }
         
         if (Array.isArray(position) &&
-          typeof position[0] === 'number' && typeof position[1] === 'number' &&
-          position[0] !== 0 && position[1] !== 0) {
+          Number.isFinite(position[0]) && Number.isFinite(position[1]) &&
+          !(position[0] === 0 && position[1] === 0)) {
           currentLine[currentLine.length] = position
           if (currentLine.length === 1) {
             result.coordinates[result.coordinates.length] = currentLine

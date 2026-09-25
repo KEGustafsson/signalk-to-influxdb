@@ -92,8 +92,7 @@ module.exports = {
                 if (shouldStore(pathValue.path) &&
                   (pathValue.path == '' || shouldStoreNow(delta, pathAndSource, time, resolution))
                 ) {
-                  if (!lastUpdates[delta.context]) { lastUpdates[delta.context] = {} }
-                  lastUpdates[delta.context][pathAndSource] = time
+                  const pointsBefore = acc.length
 
                   if (pathValue.path === 'navigation.attitude') {
                     storeAttitude(date, pathValue, tags, acc)
@@ -131,15 +130,20 @@ module.exports = {
                     }
 
                     if (pathValue.path === '') {
-                      if (!isObject(pathValue.value)) {
-                        return acc
+                      if (isObject(pathValue.value)) {
+                        Object.keys(pathValue.value).forEach(key => {
+                          addPoint(key, pathValue.value[key])
+                        })
                       }
-                      Object.keys(pathValue.value).forEach(key => {
-                        addPoint(key, pathValue.value[key])
-                      })
                     } else {
                       addPoint(pathValue.path, pathValue.value)
                     }
+                  }
+
+                  // only throttle subsequent updates if something was stored
+                  if (acc.length > pointsBefore) {
+                    if (!lastUpdates[delta.context]) { lastUpdates[delta.context] = {} }
+                    lastUpdates[delta.context][pathAndSource] = time
                   }
                 }
               }
@@ -220,7 +224,7 @@ function isObject(value) {
 }
 
 function isValidNumber(value) {
-  return typeof value === 'number' && !isNaN(value)
+  return Number.isFinite(value)
 }
 
 function isValidPosition(value) {

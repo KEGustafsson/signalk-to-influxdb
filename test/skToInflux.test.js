@@ -60,3 +60,18 @@ test('undefined values are skipped, null values are kept as jsonValue', () => {
   const points = convert(delta('environment.depth.belowTransducer', null))
   assert.deepEqual(points[0].fields, { jsonValue: 'null' })
 })
+
+test('a skipped null attitude does not suppress the next valid one', () => {
+  const convert = deltaToPointsConverter(SELF_CONTEXT, true, true, () => true, 60000, false, true)
+  const first = delta('navigation.attitude', null, 'd')
+  const next = delta('navigation.attitude', { pitch: 0.1 }, 'd')
+  // same timestamp, well within the 60s resolution
+  next.updates[0].timestamp = first.updates[0].timestamp
+  assert.deepEqual(convert(first), [])
+  assert.equal(convert(next).length, 1)
+})
+
+test('non-finite position coordinates are skipped', () => {
+  const convert = makeConverter()
+  assert.deepEqual(convert(delta('navigation.position', { latitude: Infinity, longitude: 25 }, 'e')), [])
+})
