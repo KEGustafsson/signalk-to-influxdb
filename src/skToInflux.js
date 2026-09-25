@@ -55,7 +55,8 @@ module.exports = {
             update.values.reduce((acc, pathValue) => {
 
               if (pathValue.path === 'navigation.position') {
-                if (recordTrack && shouldStorePositionNow(delta, tags.source, time)) {
+                if (recordTrack && isValidPosition(pathValue.value) &&
+                  shouldStorePositionNow(delta, tags.source, time)) {
                   const point = {
                     measurement: pathValue.path,
                     tags: tags,
@@ -91,14 +92,17 @@ module.exports = {
                 if (shouldStore(pathValue.path) &&
                   (pathValue.path == '' || shouldStoreNow(delta, pathAndSource, time, resolution))
                 ) {
-                  if (!lastUpdates[delta.context]) { lastUpdates[delta.context] = {} }
-                  lastUpdates[delta.context][pathAndSource] = time
+                  const pointsBefore = acc.length
 
                   if (pathValue.path === 'navigation.attitude') {
                     storeAttitude(date, pathValue, tags, acc)
                   } else {
                     function addPoint(path, value) {
                       let valueKey = null
+
+                      if (value === undefined) {
+                        return
+                      }
 
                       if (typeof value === 'number' &&
                         !isNaN(value)) {
@@ -126,12 +130,20 @@ module.exports = {
                     }
 
                     if (pathValue.path === '') {
-                      Object.keys(pathValue.value).forEach(key => {
-                        addPoint(key, pathValue.value[key])
-                      })
+                      if (isObject(pathValue.value)) {
+                        Object.keys(pathValue.value).forEach(key => {
+                          addPoint(key, pathValue.value[key])
+                        })
+                      }
                     } else {
                       addPoint(pathValue.path, pathValue.value)
                     }
+                  }
+
+                  // only throttle subsequent updates if something was stored
+                  if (acc.length > pointsBefore) {
+                    if (!lastUpdates[delta.context]) { lastUpdates[delta.context] = {} }
+                    lastUpdates[delta.context][pathAndSource] = time
                   }
                 }
               }
@@ -207,7 +219,24 @@ function shouldStoreNow(delta, pathAndSource, time, resolution) {
 }
 
 
+function isObject(value) {
+  return typeof value === 'object' && value !== null
+}
+
+function isValidNumber(value) {
+  return Number.isFinite(value)
+}
+
+function isValidPosition(value) {
+  return isObject(value) &&
+    isValidNumber(value.latitude) &&
+    isValidNumber(value.longitude)
+}
+
 function storeAttitude(date, pathValue, tags, acc) {
+  if (!isObject(pathValue.value)) {
+    return
+  }
   ['pitch', 'roll', 'yaw'].forEach(key => {
     if (typeof pathValue.value[key] === 'number' &&
       !isNaN(pathValue.value[key])) {
