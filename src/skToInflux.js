@@ -55,7 +55,8 @@ module.exports = {
             update.values.reduce((acc, pathValue) => {
 
               if (pathValue.path === 'navigation.position') {
-                if (recordTrack && shouldStorePositionNow(delta, tags.source, time)) {
+                if (recordTrack && isValidPosition(pathValue.value) &&
+                  shouldStorePositionNow(delta, tags.source, time)) {
                   const point = {
                     measurement: pathValue.path,
                     tags: tags,
@@ -100,6 +101,10 @@ module.exports = {
                     function addPoint(path, value) {
                       let valueKey = null
 
+                      if (value === undefined) {
+                        return
+                      }
+
                       if (typeof value === 'number' &&
                         !isNaN(value)) {
                         valueKey = 'value'
@@ -126,6 +131,9 @@ module.exports = {
                     }
 
                     if (pathValue.path === '') {
+                      if (!isObject(pathValue.value)) {
+                        return acc
+                      }
                       Object.keys(pathValue.value).forEach(key => {
                         addPoint(key, pathValue.value[key])
                       })
@@ -207,7 +215,24 @@ function shouldStoreNow(delta, pathAndSource, time, resolution) {
 }
 
 
+function isObject(value) {
+  return typeof value === 'object' && value !== null
+}
+
+function isValidNumber(value) {
+  return typeof value === 'number' && !isNaN(value)
+}
+
+function isValidPosition(value) {
+  return isObject(value) &&
+    isValidNumber(value.latitude) &&
+    isValidNumber(value.longitude)
+}
+
 function storeAttitude(date, pathValue, tags, acc) {
+  if (!isObject(pathValue.value)) {
+    return
+  }
   ['pitch', 'roll', 'yaw'].forEach(key => {
     if (typeof pathValue.value[key] === 'number' &&
       !isNaN(pathValue.value[key])) {

@@ -44,10 +44,12 @@ module.exports = function (app) {
           position = JSON.parse(row.position)
         } else {
           position = JSON.parse(row.jsonPosition)
-          position = [ position.longitude, position.latitude ]
+          position = position ? [ position.longitude, position.latitude ] : null
         }
         
-        if (position[0] !== 0 && position[1] !== 0) {
+        if (Array.isArray(position) &&
+          typeof position[0] === 'number' && typeof position[1] === 'number' &&
+          position[0] !== 0 && position[1] !== 0) {
           currentLine[currentLine.length] = position
           if (currentLine.length === 1) {
             result.coordinates[result.coordinates.length] = currentLine
